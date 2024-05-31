@@ -1,5 +1,3 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::str::FromStr;
 use axum::{Extension, Json, Router};
 use axum::http::StatusCode;
 use axum::routing::{get, post, put};
@@ -8,6 +6,7 @@ use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use base64::prelude::*;
+use log::{debug, info};
 use network::buffer::Buffer;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -15,7 +14,7 @@ type HmacSha256 = Hmac<Sha256>;
 #[derive(Serialize, Deserialize, Debug)]
 struct MatchmakerTokenPayload {
     #[serde(rename = "Puid")] player_uid: String,
-    #[serde(rename = "ClientVersion")] client_version: String,
+    #[serde(rename = "ClientVersion")] client_version: i32,
     #[serde(rename = "ExpiresAt")] expiration: String,
 }
 
@@ -35,12 +34,8 @@ struct HostServer {
 struct UserTokenRequestData {
     #[serde(rename = "Puid")] player_uid: String,
     #[serde(rename = "Username")] username: String,
-    #[serde(rename = "ClientVersion")] client_version: String,
-    #[serde(rename = "Language")] language: String,
-}
-#[derive(Clone, Debug)]
-pub struct Context {
-    pub private_key: [u8; 128]
+    #[serde(rename = "ClientVersion")] client_version: i32,
+    #[serde(rename = "Language")] language: u8,
 }
 
 pub async fn create_matchmaking_thread(private_key: [u8; 128]) {
@@ -50,17 +45,18 @@ pub async fn create_matchmaking_thread(private_key: [u8; 128]) {
         .route("/api/games", put(get_game_address))
         .route("/api/test", get(test))
         .layer(Extension(private_key));
-    println!("Matchmaking server running on 127.0.0.1:22022");
+    info!("Matchmaking server running on 127.0.0.1:22022");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:22022").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
 pub async fn test() -> (StatusCode, String) {
+    debug!("hiii");
     return (StatusCode::OK, "hi".to_string());
 }
 
 pub async fn get_game_address(Extension(private_key): Extension<[u8; 128]>) -> (StatusCode, String) {
-    let address_bits = Buffer::from(vec![127,0,0,1]).read_int();
+    let address_bits = Buffer::from(vec![127,0,0,1]).read_int_le();
     let server = HostServer {
         net_address: address_bits,
         port: 22023
@@ -70,7 +66,7 @@ pub async fn get_game_address(Extension(private_key): Extension<[u8; 128]>) -> (
 
 
 pub async fn create_token(Extension(private_key): Extension<[u8; 128]>, Json(request): Json<UserTokenRequestData>) -> (StatusCode, String) {
-    println!("Created token stuff");
+    debug!("Created token stuff");
     let payload = MatchmakerTokenPayload {
         player_uid: request.player_uid,
         client_version: request.client_version,
@@ -89,10 +85,4 @@ pub async fn create_token(Extension(private_key): Extension<[u8; 128]>, Json(req
     };
 
     return (StatusCode::OK, BASE64_STANDARD.encode(serde_json::to_string(&token).unwrap().as_bytes()));
-}
-
-fn closure<F>(callback: F) -> ()
-    where
-        F: Send + Fn(Context) + 'static,
-{
 }

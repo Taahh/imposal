@@ -33,6 +33,13 @@ impl Buffer {
         return val;
     }
 
+    pub fn read_int_le(mut self) -> i32 {
+        let data: [u8; 4] = self.data[self.index..self.index+4].try_into().unwrap();
+        let val = i32::from_le_bytes(data);
+        self.index += 4;
+        return val;
+    }
+
     pub fn read_long(mut self) -> i64 {
         let data: [u8; 8] = self.data[self.index..self.index+8].try_into().unwrap();
         let val = i64::from_be_bytes(data);
